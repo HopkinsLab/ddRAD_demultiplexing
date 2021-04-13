@@ -1,0 +1,116 @@
+using ipyRAD
+
+documentation: https://ipyrad.readthedocs.io/en/latest/index.html
+
+ipyRAD runs in seven steps (https://ipyrad.readthedocs.io/en/latest/7-outline.html).
+	To assemble a dataset with ipyRAD, you will need to:
+
+		- prepare your data files by demultiplexing
+		- prepare your demultiplexed files by trimming
+		- generate and edit a 'params' file
+		- run all 7 steps in association with this params file
+
+
+
+1) Installation 
+
+	You will need to have conda installed on the cluster if you don't already have it.
+	Log into your account on the cluster, navigate to your user directory on scratch (for example, /n/holyscratch01/hopkins_lab/ben/) and follow the instructions to install conda here: https://docs.conda.io/projects/conda/en/latest/index.html
+	
+	Cluster has conda in it
+		
+		module load Anaconda3/5.0.1-fasrc02
+	
+	Then, create new conda environment with latest version of ipyrad. Name it something like 'ipyrad01'. No brackets in name.
+
+		conda create -n [env_name] python=3.6 
+		source activate [env_name] 
+	(to end it)			source deactivate [env_name]
+		conda install ipyrad –c bioconda 
+	
+	View packages in [env_name] to check which version of ipyRAD was installed (the above command will install the latest version)
+
+		conda list -n [env_name]
+
+
+
+2) Demultiplexing and trimming - need STACKS, maybe installed on the cluster
+	
+	module load gcc/7.1.0-fasrc01 stacks/2.4-fasrc01
+	Path to raw reads on the cluster: /n/holystore01/LABS/hopkins_lab/Lab/schaturvedi/ddRAD_sam_april_2021/raw_reads
+
+	a) Move N's to header of raw reads (see 2a_MoveNs.txt)
+
+		We included short random sequences (which we refer to as N's) in our barcodes so that we can use the clone filter function in STACKS to identify PCR clones http://catchenlab.life.illinois.edu/stacks/comp/clone_filter.php. Beth wrote a Python script that will prepare our raw reads for demultiplexing in STACKS with the clone filter function. This involves a few steps that are pretty straightforward but a little weird, so I wrote a separate text file to explain how wed do this in detail (2a_MoveNs.txt).
+ 
+		relevant files:
+		2a_MoveNs.txt 				this is where I describe the full process of this step
+		2a_pigz_fastq.sh 			this is the script I use to zip the split files
+		2a_Move_Ns_to_header_both_seqs.py 	this is the python script Beth wrote to move Ns to the header of each read
+		2a_send_move_Ns_Beths.sh 	this is the script I use to run Beth's python script on my files - change the path to my files
+		2a_cat_Ns_header.sh 		this is the script I use to concatenate the output of Beth's python script
+
+# Moved the reads from reads_cat folder to demultiplex folder for next step.
+
+	b) Demultiplexing
+
+		We use STACKS to demultiplex our samples. Matt/Beth wrote some scripts to call these commands. I have shared an example set (names beginning with '2b_'). You will also need to write a simple text file containing sample names and barcodes. See example (2b_barcodes_example.txt).
+
+		relevant files:
+		2b_send_Nstacks_example.slurm	this is the slurm script you will submit to the cluster, it will call the other scripts
+		2b_run_stacks_1PR_example.sh 	this is the script that will run the 'process radtags' function in STACKS, make sure it's executable
+		2b_run_stacks_2CF_example.sh 	this is the script that will run the 'clone filtering' function in STACKS, make sure it's executable
+		2b_barcodes_example.txt 		this is the barcodes key. column 1 = PstI barcode [tab], column 2 = MspI barcode [tab], column 3 = sample_name
+
+
+	c) Trimming
+
+		After demultiplexing, we use trimmomatic to trim the demultiplexed files. I think ipyRAD would also do this, but we have decided to trust trimmomatic more, so we do this first. I have shared an example script to call trimmomatic for each file. It's kind of a hassle to write - I use an excel sheet to write/organize the repeptitive commands, but you could also write a script to generate the commands if you are more fancy than me.
+
+		relevant files:
+		2c_install_trimmomatic.sh 		this is a walkthrough for installing trimmomatic on the cluster. DON'T execute this file, open and work through it. 
+		2c_trimmomatic_example.sh 		this is what a script will look like to run trimmomatic on each demultiplexed file
+		2c_write_trimmomatic_example.xlsx	this is how I generate the series of trimmomatic commands. Change all columns except for 'start' and 'end' of command
+
+
+
+3) Running ipyRAD
+
+	a) Generate a 'params' file
+
+		Create a directory to house your ipyRAD assembly, name it something like 'ipyRAD_assembly01', and navigate there. You may want to run multiple assemblies 
+
+		Activate your ipyRAD environment:
+
+			source activate [env_name]
+
+		Initiate a new assembly, which will generate an associated params file:
+
+			ipyrad -n [name_of_assembly]
+
+		Edit your params file (https://ipyrad.readthedocs.io/en/latest/6-params.html). I will share an example of one of mine. Most values can be left as the default. The crucial values to change are:
+
+			[4] = path to directory that contains your demultiplexed, trimmed files
+			[7] = pairddrad
+			[8] = TGCAG, CGG 
+			[14] = something between 0.85 and 0.93 (this is the major parameter to tweak that could affect the assembly)
+			[16] = 2
+			[17] = 36 (this matches the parameters we use in trimmomatic)
+			[21] = 4 (I always run one assembly with min_sample_depth = 4 and then rerun the last steps with a series of larger values)
+			[27] = * (a '*'' will ask for all output formats. Why the hell not?)
+
+
+	b) Run the 7 steps of ipyRAD
+
+		Simply acitivate your conda environment and call the deceptively simple ipyRAD command. We write slurm scripts to request time/memory to run ipyRAD on the cluster because it is resource intensive depending on the size of your dataset.
+
+		Steps 1 & 2 are very fast, step 3 takes the longest. If you're feeling lucky, you could ask for a lot of memory and time and call them all at once. I typically break it up into 4 scripts as follows: 1+2, 3, 4+5, 6+7. I have shared examples.
+
+		relevant files:
+		3b_ipyrad_S12_example.sh
+		3b_ipyrad_S3_example.sh
+		3b_ipyrad_S45_example.sh
+		3b_ipyrad_S67_example.sh
+
+
+

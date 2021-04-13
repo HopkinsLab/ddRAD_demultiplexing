@@ -1,0 +1,42 @@
+2a_MoveNs.txt
+
+We want to:
+1) split our raw reads files so we can modify them in chunks in parallel (faster)
+2) zip the split files to prepare them for Beth's script
+3) run Beth's script to move N's to header of reads
+4) concatenate the edited files (these are now ready for demultiplexing with STACKS)
+
+
+
+
+1) Split input files to run the 'Move_Ns' script "in parallel"
+# I do this interactively on a test node
+srun -p test -n 1 -N 1 --pty --mem 8000 -t 0-04:00 /bin/bash
+
+# navigate to the directory containing your raw reads files as we received them from the sequencing core
+# then run the following to split them into ~5 files each
+# you just need to replace the [bracketed] text with however your raw reads files are named
+zcat [R1_raw_reads].fastq.gz | split -l 300000000 - [R1_raw_reads]_ --additional-suffix=.fastq
+zcat [R2_raw_reads].fastq.gz | split -l 300000000 - [R2_raw_reads]_ --additional-suffix=.fastq
+
+
+
+2) zip the split files using pigz
+# I do this on the cluster. See example script
+2a_pigz_fastq.sh
+
+
+
+3) Move N's to header
+# now we get to run Beth's script (Move_Ns_to_header_both_seqs.py) and edit our raw reads files
+# first, put the python script on the cluster and make sure it's executable
+chmod u+x 2a_Move_Ns_to_header_both_seqs.py
+
+# then, I run it on the cluster. See example script
+2a_send_move_Ns_Beths.sh
+
+
+
+4) Concatenate edited files
+# you could probably do this interactively on a test node, but I just run it on the cluster. Takes about 20-30 minutes. See example script
+2a_cat_Ns_header.sh
